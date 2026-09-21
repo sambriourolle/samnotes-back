@@ -1,0 +1,216 @@
+[
+  {
+    "id": "9d47d0a3-7bf2-4148-8214-e9b62c8e0ed6",
+    "parameters": [
+      {
+        "key": "noteId",
+        "name": "noteId",
+        "type": "string"
+      }
+    ],
+    "actions": {
+      "__NOTE_FOUND__": {
+        "id": "__NOTE_FOUND__",
+        "name": "Vérifier que la note existe",
+        "next": null,
+        "type": "if",
+        "value": {
+          "code": "return Boolean(context.workflow['__SELECT_NOTE__'].result?.data?.[0])",
+          "__wwtype": "js"
+        },
+        "branches": [
+          {
+            "id": "__GET_MARKDOWN__",
+            "value": true
+          },
+          {
+            "id": "__RETURN_NOT_FOUND__",
+            "value": false
+          }
+        ],
+        "__wwdescription": "Dirige les notes manquantes vers une vraie réponse 404 avant toute lecture de stockage."
+      },
+      "__FORMAT_NOTE__": {
+        "id": "__FORMAT_NOTE__",
+        "code": "// Read the private storage result as UTF-8 Markdown text.\nconst selectedNote = context.workflow['__SELECT_NOTE__'].result.data[0];\nconst storageResult = context.workflow['__GET_MARKDOWN__'].result;\nlet markdown;\n\n// Storage normally returns a Blob. The current runtime returns a data URL,\n// so handle both documented and observed representations.\nif (storageResult?.file && typeof storageResult.file.text === 'function') {\n  markdown = await storageResult.file.text();\n} else if (typeof storageResult === 'string' && storageResult.startsWith('data:')) {\n  const encodedContent = storageResult.split(',', 2)[1];\n  markdown = Buffer.from(encodedContent, 'base64').toString('utf8');\n} else {\n  throw new Error('markdown_storage_result_unavailable');\n}\n\nreturn {\n  note: {\n    id: selectedNote.id,\n    title: selectedNote.title,\n    excerpt: selectedNote.excerpt,\n    source_status: selectedNote.source_status,\n    markdown_file_path: selectedNote.markdown_file_path,\n    createdAt: selectedNote.createdAt,\n    updatedAt: selectedNote.updatedAt,\n  },\n  markdown,\n  storage: {\n    configured: true,\n    state: 'storage_ready',\n    path: selectedNote.markdown_file_path,\n    message: 'Le Markdown a été lu depuis le stockage privé.',\n  },\n};",
+        "name": "Préparer la réponse",
+        "next": "__RETURN_NOTE__",
+        "type": "custom-js",
+        "__wwdescription": "Convertit le résultat de stockage privé en texte Markdown et normalise la réponse."
+      },
+      "__RETURN_NOTE__": {
+        "id": "__RETURN_NOTE__",
+        "args": {
+          "body": {
+            "code": "return context.workflow['__FORMAT_NOTE__'].result",
+            "__wwtype": "js"
+          },
+          "status": 200,
+          "contentType": "application/json"
+        },
+        "name": "Envoyer la réponse",
+        "next": null,
+        "type": "return-response",
+        "__wwdescription": "Retourne la note et son Markdown réel en JSON."
+      },
+      "__SELECT_NOTE__": {
+        "id": "__SELECT_NOTE__",
+        "name": "Lire la note",
+        "next": "__NOTE_FOUND__",
+        "type": "table-select",
+        "count": false,
+        "limit": 1,
+        "offset": 0,
+        "columns": {
+          "id": true,
+          "title": true,
+          "excerpt": true,
+          "createdAt": true,
+          "updatedAt": true,
+          "source_status": true,
+          "markdown_file_path": true
+        },
+        "filters": {
+          "link": "$and",
+          "conditions": [
+            {
+              "field": "id",
+              "value": {
+                "code": "return context.parameters['noteId']",
+                "__wwtype": "js"
+              },
+              "operator": "$eq"
+            }
+          ]
+        },
+        "tableName": "notes",
+        "formulaColumns": {},
+        "__wwdescription": "Cherche une note par son identifiant."
+      },
+      "__GET_MARKDOWN__": {
+        "id": "__GET_MARKDOWN__",
+        "args": {
+          "path": {
+            "code": "return context.workflow['__SELECT_NOTE__'].result.data[0].markdown_file_path",
+            "__wwtype": "js"
+          },
+          "access": "private"
+        },
+        "name": "Lire le Markdown privé",
+        "next": "__FORMAT_NOTE__",
+        "type": "storage-get",
+        "__wwdescription": "Charge le fichier Markdown privé référencé par la note."
+      },
+      "__RETURN_NOT_FOUND__": {
+        "id": "__RETURN_NOT_FOUND__",
+        "args": {
+          "body": {
+            "code": "return { error: 'note_not_found', message: 'La note demandée est introuvable.' }",
+            "__wwtype": "js"
+          },
+          "status": 404,
+          "contentType": "application/json"
+        },
+        "name": "Envoyer la réponse introuvable",
+        "next": null,
+        "type": "return-response",
+        "__wwdescription": "Retourne une réponse JSON 404 explicite pour un identifiant absent."
+      }
+    },
+    "firstAction": "__SELECT_NOTE__",
+    "firstErrorAction": null,
+    "meta": {
+      "path": "/api/samnotes/notes/{noteId}",
+      "method": "GET",
+      "security": {
+        "accessRule": "authenticated"
+      }
+    },
+    "trigger": "ww-api"
+  },
+  {
+    "id": "f3cdbc61-7a6c-4e37-ae87-5c00aeaa0456",
+    "parameters": [],
+    "actions": {
+      "__PUT_MARKDOWN__": {
+        "id": "__PUT_MARKDOWN__",
+        "args": {
+          "file": "# Bienvenue dans SamNotes\n\nCette note est lue depuis un fichier Markdown privé dans le stockage WeWeb.\n\n- Métadonnées dans PostgreSQL\n- Contenu dans le stockage\n- Lecture via un endpoint authentifié\n\nProchaine étape : exporter et tester le même parcours en Docker local avec un stockage S3 compatible.\n",
+          "mode": "single",
+          "path": "poc/bienvenue.md",
+          "tags": {
+            "format": "markdown",
+            "purpose": "samnotes-poc"
+          },
+          "access": "private",
+          "replaceIfExists": false
+        },
+        "name": "Créer le Markdown privé",
+        "next": "__RETURN_RESULT__",
+        "type": "storage-put",
+        "__wwdescription": "Écrit le fichier Markdown de démonstration dans le stockage privé."
+      },
+      "__RETURN_RESULT__": {
+        "id": "__RETURN_RESULT__",
+        "args": {
+          "data": {
+            "code": "return context.workflow['__PUT_MARKDOWN__'].result",
+            "__wwtype": "js"
+          },
+          "_type": "object"
+        },
+        "name": "Retourner le fichier créé",
+        "next": null,
+        "type": "return-result",
+        "__wwdescription": "Retourne le chemin du fichier créé pour vérification."
+      }
+    },
+    "firstAction": "__PUT_MARKDOWN__",
+    "firstErrorAction": null,
+    "meta": {},
+    "trigger": null
+  },
+  {
+    "id": "192ae40a-c8ec-47fc-885f-d01e827c6a8e",
+    "parameters": [],
+    "actions": {
+      "__GET_MARKDOWN__": {
+        "id": "__GET_MARKDOWN__",
+        "args": {
+          "path": "poc/bienvenue.md",
+          "access": "private"
+        },
+        "name": "Lire le Markdown privé",
+        "next": "__VERIFY_MARKDOWN__",
+        "type": "storage-get",
+        "__wwdescription": "Relit le fichier Markdown privé créé pour vérifier son contenu réel."
+      },
+      "__RETURN_RESULT__": {
+        "id": "__RETURN_RESULT__",
+        "args": {
+          "data": {
+            "code": "return context.workflow['__VERIFY_MARKDOWN__'].result",
+            "__wwtype": "js"
+          },
+          "_type": "object"
+        },
+        "name": "Retourner la vérification",
+        "next": null,
+        "type": "return-result",
+        "__wwdescription": "Retourne les contrôles de contenu et de taille."
+      },
+      "__VERIFY_MARKDOWN__": {
+        "id": "__VERIFY_MARKDOWN__",
+        "code": "// Decode the observed storage result without changing it.\nconst storageResult = context.workflow['__GET_MARKDOWN__'].result;\nlet markdown;\n\nif (storageResult?.file && typeof storageResult.file.text === 'function') {\n  markdown = await storageResult.file.text();\n} else if (typeof storageResult === 'string' && storageResult.startsWith('data:')) {\n  markdown = Buffer.from(storageResult.split(',', 2)[1], 'base64').toString('utf8');\n} else {\n  throw new Error('markdown_storage_result_unavailable');\n}\n\nconst expectedMarkdown = '# Bienvenue dans SamNotes\\n\\nCette note est lue depuis un fichier Markdown privé dans le stockage WeWeb.\\n\\n- Métadonnées dans PostgreSQL\\n- Contenu dans le stockage\\n- Lecture via un endpoint authentifié\\n\\nProchaine étape : exporter et tester le même parcours en Docker local avec un stockage S3 compatible.\\n';\n\nreturn {\n  path: 'poc/bienvenue.md',\n  matchesExpectedMarkdown: markdown === expectedMarkdown,\n  characterLength: markdown.length,\n  utf8ByteLength: Buffer.byteLength(markdown, 'utf8'),\n};",
+        "name": "Vérifier le contenu Markdown",
+        "next": "__RETURN_RESULT__",
+        "type": "custom-js",
+        "__wwdescription": "Décode le résultat de stockage et compare chaque caractère avec le Markdown attendu."
+      }
+    },
+    "firstAction": "__GET_MARKDOWN__",
+    "firstErrorAction": null,
+    "meta": {},
+    "trigger": null
+  }
+]
