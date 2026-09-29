@@ -30,6 +30,8 @@
         "@better-fetch/fetch": "1.1.21",
         "@google-cloud/storage": "7.19.0",
         "@googleapis/calendar": "14.2.0",
+        "@googleapis/docs": "10.0.0",
+        "@googleapis/drive": "22.0.0",
         "@googleapis/sheets": "13.0.1",
         "@hono/node-server": "1.19.11",
         "@hubspot/api-client": "14.0.1",

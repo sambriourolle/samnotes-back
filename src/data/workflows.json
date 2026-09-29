@@ -1,5 +1,568 @@
 [
   {
+    "id": "fc22b9c7-b316-484a-a0a8-845e6ea52c2e",
+    "parameters": [],
+    "actions": {
+      "__RETURN_NOTES__": {
+        "id": "__RETURN_NOTES__",
+        "args": {
+          "body": {
+            "code": "return { notes: context.workflow['__SELECT_NOTES__'].result.data || [] }",
+            "__wwtype": "js"
+          },
+          "status": 200,
+          "contentType": "application/json"
+        },
+        "name": "Retourner les notes",
+        "next": null,
+        "type": "return-response",
+        "__wwdescription": "Retourne les métadonnées de notes au client authentifié, sans chemin privé."
+      },
+      "__SELECT_NOTES__": {
+        "id": "__SELECT_NOTES__",
+        "name": "Lire les notes",
+        "next": "__RETURN_NOTES__",
+        "sort": [
+          {
+            "key": "updatedAt",
+            "direction": "DESC"
+          }
+        ],
+        "type": "table-select",
+        "count": false,
+        "limit": 100,
+        "offset": 0,
+        "columns": {
+          "id": true,
+          "title": true,
+          "excerpt": true,
+          "archived": true,
+          "revision": true,
+          "updatedAt": true,
+          "source_status": true
+        },
+        "tableName": "notes",
+        "formulaColumns": {},
+        "__wwdescription": "Charge les métadonnées nécessaires à la bibliothèque sans charger de chemin de stockage privé."
+      }
+    },
+    "firstAction": "__SELECT_NOTES__",
+    "firstErrorAction": null,
+    "meta": {
+      "path": "/api/samnotes/notes",
+      "method": "GET",
+      "security": {
+        "accessRule": "authenticated"
+      }
+    },
+    "trigger": "ww-api"
+  },
+  {
+    "id": "ff602183-a69c-4b0b-b4da-8114e53173d4",
+    "parameters": [
+      {
+        "key": "operation",
+        "name": "operation",
+        "type": "string"
+      },
+      {
+        "key": "noteId",
+        "name": "noteId",
+        "type": "string"
+      },
+      {
+        "key": "revision",
+        "name": "revision",
+        "type": "number"
+      },
+      {
+        "key": "title",
+        "name": "title",
+        "type": "string"
+      },
+      {
+        "key": "markdown",
+        "name": "markdown",
+        "type": "string"
+      }
+    ],
+    "actions": {
+      "saved": {
+        "id": "saved",
+        "args": {
+          "body": {
+            "code": "const n=context.workflow.update.result?.[0]; return n ? {saved:true,note:{id:n.id,title:n.title,revision:n.revision,archived:n.archived}} : {error:'Conflit : votre brouillon est conservé. Rechargez la note.'};",
+            "__wwtype": "js"
+          },
+          "status": {
+            "code": "return context.workflow.update.result?.[0] ? 200 : 409",
+            "__wwtype": "js"
+          },
+          "contentType": "application/json"
+        },
+        "name": "Confirmer l’enregistrement",
+        "next": null,
+        "type": "return-response",
+        "__wwdescription": "Vérifie le résultat du compare-and-swap."
+      },
+      "valid": {
+        "id": "valid",
+        "name": "Demande valide ?",
+        "next": null,
+        "type": "if",
+        "value": {
+          "code": "return context.workflow.validate.result.ok",
+          "__wwtype": "js"
+        },
+        "branches": [
+          {
+            "id": "isCreate",
+            "value": true
+          },
+          {
+            "id": "invalid",
+            "value": false
+          }
+        ],
+        "__wwdescription": "Contrôle avant accès."
+      },
+      "exists": {
+        "id": "exists",
+        "name": "Note existante ?",
+        "next": null,
+        "type": "if",
+        "value": {
+          "code": "return Boolean(context.workflow.select.result.data?.[0])",
+          "__wwtype": "js"
+        },
+        "branches": [
+          {
+            "id": "current",
+            "value": true
+          },
+          {
+            "id": "notfound",
+            "value": false
+          }
+        ],
+        "__wwdescription": "Gère les liens périmés."
+      },
+      "insert": {
+        "id": "insert",
+        "data": {
+          "title": {
+            "code": "return context.workflow.validate.result.title",
+            "__wwtype": "js"
+          },
+          "excerpt": {
+            "code": "return context.parameters.markdown.slice(0,240)",
+            "__wwtype": "js"
+          },
+          "archived": false,
+          "revision": 0,
+          "source_status": "storage_ready",
+          "markdown_file_path": {
+            "code": "return context.workflow.putCreate.result.path",
+            "__wwtype": "js"
+          }
+        },
+        "mode": "single",
+        "name": "Créer la note",
+        "next": "created",
+        "type": "table-insert",
+        "upsert": false,
+        "columns": [
+          "title",
+          "excerpt",
+          "source_status",
+          "markdown_file_path",
+          "archived",
+          "revision"
+        ],
+        "tableName": "notes",
+        "returnData": true,
+        "__wwdescription": "Crée la ligne après stockage privé réussi."
+      },
+      "isSave": {
+        "id": "isSave",
+        "name": "Modifier le contenu ?",
+        "next": null,
+        "type": "if",
+        "value": {
+          "code": "return context.parameters.operation==='save'",
+          "__wwtype": "js"
+        },
+        "branches": [
+          {
+            "id": "putVersion",
+            "value": true
+          },
+          {
+            "id": "archive",
+            "value": false
+          }
+        ],
+        "__wwdescription": "Archiver ne modifie pas le fichier."
+      },
+      "select": {
+        "id": "select",
+        "name": "Lire la version actuelle",
+        "next": "exists",
+        "type": "table-select",
+        "count": false,
+        "limit": 1,
+        "offset": 0,
+        "columns": {
+          "id": true,
+          "archived": true,
+          "revision": true
+        },
+        "filters": {
+          "link": "$and",
+          "conditions": [
+            {
+              "field": "id",
+              "value": {
+                "code": "return context.parameters.noteId",
+                "__wwtype": "js"
+              },
+              "operator": "$eq"
+            }
+          ]
+        },
+        "tableName": "notes",
+        "formulaColumns": {},
+        "__wwdescription": "Résout la note côté serveur."
+      },
+      "update": {
+        "id": "update",
+        "data": {
+          "title": {
+            "code": "return context.workflow.validate.result.title",
+            "__wwtype": "js"
+          },
+          "excerpt": {
+            "code": "return context.parameters.markdown.slice(0,240)",
+            "__wwtype": "js"
+          },
+          "revision": {
+            "code": "return context.parameters.revision+1",
+            "__wwtype": "js"
+          },
+          "markdown_file_path": {
+            "code": "return context.workflow.putVersion.result.path",
+            "__wwtype": "js"
+          }
+        },
+        "name": "Publier la version",
+        "next": "saved",
+        "type": "table-update",
+        "columns": [
+          "title",
+          "excerpt",
+          "markdown_file_path",
+          "revision"
+        ],
+        "filters": {
+          "link": "$and",
+          "conditions": [
+            {
+              "field": "id",
+              "value": {
+                "code": "return context.parameters.noteId",
+                "__wwtype": "js"
+              },
+              "operator": "$eq"
+            },
+            {
+              "field": "revision",
+              "value": {
+                "code": "return context.parameters.revision",
+                "__wwtype": "js"
+              },
+              "operator": "$eq"
+            },
+            {
+              "field": "archived",
+              "value": false,
+              "operator": "$eq"
+            }
+          ]
+        },
+        "tableName": "notes",
+        "returnData": true,
+        "updateMode": "by-filters",
+        "__wwdescription": "Change la révision atomiquement si elle est encore actuelle."
+      },
+      "archive": {
+        "id": "archive",
+        "data": {
+          "archived": {
+            "code": "return context.parameters.operation==='archive'",
+            "__wwtype": "js"
+          },
+          "revision": {
+            "code": "return context.parameters.revision+1",
+            "__wwtype": "js"
+          }
+        },
+        "name": "Archiver ou restaurer",
+        "next": "archived",
+        "type": "table-update",
+        "columns": [
+          "archived",
+          "revision"
+        ],
+        "filters": {
+          "link": "$and",
+          "conditions": [
+            {
+              "field": "id",
+              "value": {
+                "code": "return context.parameters.noteId",
+                "__wwtype": "js"
+              },
+              "operator": "$eq"
+            },
+            {
+              "field": "revision",
+              "value": {
+                "code": "return context.parameters.revision",
+                "__wwtype": "js"
+              },
+              "operator": "$eq"
+            }
+          ]
+        },
+        "tableName": "notes",
+        "returnData": true,
+        "updateMode": "by-filters",
+        "__wwdescription": "Archive réversible avec contrôle de concurrence."
+      },
+      "created": {
+        "id": "created",
+        "args": {
+          "body": {
+            "code": "const n=context.workflow.insert.result[0]; return {saved:true,note:{id:n.id,title:n.title,revision:n.revision,archived:n.archived}};",
+            "__wwtype": "js"
+          },
+          "status": 201,
+          "contentType": "application/json"
+        },
+        "name": "Confirmer la création",
+        "next": null,
+        "type": "return-response",
+        "__wwdescription": "Retourne un identifiant sans chemin privé."
+      },
+      "current": {
+        "id": "current",
+        "name": "Version à jour ?",
+        "next": null,
+        "type": "if",
+        "value": {
+          "code": "const n=context.workflow.select.result.data[0]; return n.revision===context.parameters.revision && !(context.parameters.operation==='save' && n.archived);",
+          "__wwtype": "js"
+        },
+        "branches": [
+          {
+            "id": "isSave",
+            "value": true
+          },
+          {
+            "id": "conflict",
+            "value": false
+          }
+        ],
+        "__wwdescription": "Évite les écrasements concurrents et l’édition d’une archive."
+      },
+      "invalid": {
+        "id": "invalid",
+        "args": {
+          "body": {
+            "code": "return {error:context.workflow.validate.result.error}",
+            "__wwtype": "js"
+          },
+          "status": {
+            "code": "return context.workflow.validate.result.status",
+            "__wwtype": "js"
+          },
+          "contentType": "application/json"
+        },
+        "name": "Refuser",
+        "next": null,
+        "type": "return-response",
+        "__wwdescription": "Validation sans effet secondaire."
+      },
+      "archived": {
+        "id": "archived",
+        "args": {
+          "body": {
+            "code": "const n=context.workflow.archive.result?.[0]; return n ? {saved:true,note:{id:n.id,title:n.title,revision:n.revision,archived:n.archived}} : {error:'Conflit : rechargez la note.'};",
+            "__wwtype": "js"
+          },
+          "status": {
+            "code": "return context.workflow.archive.result?.[0] ? 200 : 409",
+            "__wwtype": "js"
+          },
+          "contentType": "application/json"
+        },
+        "name": "Confirmer l’archive",
+        "next": null,
+        "type": "return-response",
+        "__wwdescription": "Vérifie l’écriture réelle."
+      },
+      "conflict": {
+        "id": "conflict",
+        "args": {
+          "body": {
+            "error": "La note a changé ou est archivée. Rechargez-la avant de réessayer."
+          },
+          "status": 409,
+          "contentType": "application/json"
+        },
+        "name": "Conflit de modification",
+        "next": null,
+        "type": "return-response",
+        "__wwdescription": "Conserve le brouillon client et invite à relire."
+      },
+      "isCreate": {
+        "id": "isCreate",
+        "name": "Nouvelle note ?",
+        "next": null,
+        "type": "if",
+        "value": {
+          "code": "return context.parameters.operation === 'create'",
+          "__wwtype": "js"
+        },
+        "branches": [
+          {
+            "id": "putCreate",
+            "value": true
+          },
+          {
+            "id": "select",
+            "value": false
+          }
+        ],
+        "__wwdescription": "Distingue création et modification."
+      },
+      "notfound": {
+        "id": "notfound",
+        "args": {
+          "body": {
+            "error": "Note introuvable."
+          },
+          "status": 404,
+          "contentType": "application/json"
+        },
+        "name": "Note introuvable",
+        "next": null,
+        "type": "return-response",
+        "__wwdescription": "Aucune mutation."
+      },
+      "validate": {
+        "id": "validate",
+        "code": "const p = context.parameters;\nif (!context.auth?.isAuthenticated) return {ok:false,status:401,error:'Connexion requise.'};\nif (!['create','save','archive','restore'].includes(p.operation)) return {ok:false,status:400,error:'Opération invalide.'};\nif (p.operation !== 'create' && (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(p.noteId || '') || !Number.isInteger(p.revision) || p.revision < 0)) return {ok:false,status:400,error:'Identifiant ou version invalide.'};\nif (['create','save'].includes(p.operation) && (typeof p.title !== 'string' || !p.title.trim() || p.title.trim().length > 180 || typeof p.markdown !== 'string' || p.markdown.length > 1000000)) return {ok:false,status:400,error:'Titre requis (180 caractères maximum), contenu limité à 1 million de caractères.'};\n// Write a new file so concurrent requests cannot overwrite each other's content.\nreturn {ok:true,title:(p.title || '').trim(),path:'notes/versions/' + Date.now() + '-' + Math.random().toString(36).slice(2) + '-' + Math.random().toString(36).slice(2) + '.md'};",
+        "name": "Valider",
+        "next": "valid",
+        "type": "custom-js",
+        "__wwdescription": "Valide identité, opération, titre et contenu."
+      },
+      "putCreate": {
+        "id": "putCreate",
+        "args": {
+          "file": {
+            "code": "return context.parameters.markdown",
+            "__wwtype": "js"
+          },
+          "mode": "single",
+          "path": {
+            "code": "return context.workflow.validate.result.path",
+            "__wwtype": "js"
+          },
+          "access": "private",
+          "replaceIfExists": false
+        },
+        "name": "Stocker le Markdown",
+        "next": "insert",
+        "type": "storage-put",
+        "__wwdescription": "Chemin généré serveur, fichier privé immuable."
+      },
+      "putVersion": {
+        "id": "putVersion",
+        "args": {
+          "file": {
+            "code": "return context.parameters.markdown",
+            "__wwtype": "js"
+          },
+          "mode": "single",
+          "path": {
+            "code": "return context.workflow.validate.result.path",
+            "__wwtype": "js"
+          },
+          "access": "private",
+          "replaceIfExists": false
+        },
+        "name": "Écrire une version",
+        "next": "update",
+        "type": "storage-put",
+        "__wwdescription": "Préserve le fichier précédent."
+      }
+    },
+    "firstAction": "validate",
+    "firstErrorAction": null,
+    "meta": {
+      "path": "/api/samnotes/mutate",
+      "method": "POST",
+      "security": {
+        "accessRule": "authenticated"
+      }
+    },
+    "trigger": "ww-api"
+  },
+  {
+    "id": "34cacd85-8384-4874-9b52-007b983fc1de",
+    "parameters": [],
+    "actions": {
+      "__RETURN_RESULT__": {
+        "id": "__RETURN_RESULT__",
+        "args": {
+          "data": {
+            "code": "return context.workflow['__PUT_TEST_MARKDOWN__'].result",
+            "__wwtype": "js"
+          },
+          "_type": "object"
+        },
+        "name": "Retourner le fichier de test",
+        "next": null,
+        "type": "return-result",
+        "__wwdescription": "Retourne le chemin créé pour préparer la ligne de note jetable."
+      },
+      "__PUT_TEST_MARKDOWN__": {
+        "id": "__PUT_TEST_MARKDOWN__",
+        "args": {
+          "file": "# Vérification Herdr\n\nContenu initial jetable.\n",
+          "mode": "single",
+          "path": "poc/herdr-write-verification.md",
+          "tags": {
+            "format": "markdown",
+            "purpose": "herdr-verification"
+          },
+          "access": "private",
+          "replaceIfExists": false
+        },
+        "name": "Créer le Markdown de test",
+        "next": "__RETURN_RESULT__",
+        "type": "storage-put",
+        "__wwdescription": "Crée le fichier privé uniquement destiné à la vérification d’écriture du slice."
+      }
+    },
+    "firstAction": "__PUT_TEST_MARKDOWN__",
+    "firstErrorAction": null,
+    "meta": {},
+    "trigger": null
+  },
+  {
     "id": "9d47d0a3-7bf2-4148-8214-e9b62c8e0ed6",
     "parameters": [
       {
@@ -9,54 +572,112 @@
       }
     ],
     "actions": {
-      "__NOTE_FOUND__": {
-        "id": "__NOTE_FOUND__",
-        "name": "Vérifier que la note existe",
+      "v": {
+        "id": "v",
+        "code": "const noteId=context.parameters.noteId; return {valid:typeof noteId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(noteId)};",
+        "name": "Valider l’identifiant",
+        "next": "ok",
+        "type": "custom-js",
+        "__wwdescription": "Valide noteId avant toute lecture."
+      },
+      "ok": {
+        "id": "ok",
+        "name": "Identifiant valide ?",
         "next": null,
         "type": "if",
         "value": {
-          "code": "return Boolean(context.workflow['__SELECT_NOTE__'].result?.data?.[0])",
+          "code": "return context.workflow.v.result.valid",
           "__wwtype": "js"
         },
         "branches": [
           {
-            "id": "__GET_MARKDOWN__",
+            "id": "select",
             "value": true
           },
           {
-            "id": "__RETURN_NOT_FOUND__",
+            "id": "bad",
             "value": false
           }
         ],
-        "__wwdescription": "Dirige les notes manquantes vers une vraie réponse 404 avant toute lecture de stockage."
+        "__wwdescription": "Dirige vers la lecture ou une erreur sûre."
       },
-      "__FORMAT_NOTE__": {
-        "id": "__FORMAT_NOTE__",
-        "code": "// Read the private storage result as UTF-8 Markdown text.\nconst selectedNote = context.workflow['__SELECT_NOTE__'].result.data[0];\nconst storageResult = context.workflow['__GET_MARKDOWN__'].result;\nlet markdown;\n\n// Storage normally returns a Blob. The current runtime returns a data URL,\n// so handle both documented and observed representations.\nif (storageResult?.file && typeof storageResult.file.text === 'function') {\n  markdown = await storageResult.file.text();\n} else if (typeof storageResult === 'string' && storageResult.startsWith('data:')) {\n  const encodedContent = storageResult.split(',', 2)[1];\n  markdown = Buffer.from(encodedContent, 'base64').toString('utf8');\n} else {\n  throw new Error('markdown_storage_result_unavailable');\n}\n\nreturn {\n  note: {\n    id: selectedNote.id,\n    title: selectedNote.title,\n    excerpt: selectedNote.excerpt,\n    source_status: selectedNote.source_status,\n    markdown_file_path: selectedNote.markdown_file_path,\n    createdAt: selectedNote.createdAt,\n    updatedAt: selectedNote.updatedAt,\n  },\n  markdown,\n  storage: {\n    configured: true,\n    state: 'storage_ready',\n    path: selectedNote.markdown_file_path,\n    message: 'Le Markdown a été lu depuis le stockage privé.',\n  },\n};",
-        "name": "Préparer la réponse",
-        "next": "__RETURN_NOTE__",
-        "type": "custom-js",
-        "__wwdescription": "Convertit le résultat de stockage privé en texte Markdown et normalise la réponse."
-      },
-      "__RETURN_NOTE__": {
-        "id": "__RETURN_NOTE__",
+      "bad": {
+        "id": "bad",
         "args": {
           "body": {
-            "code": "return context.workflow['__FORMAT_NOTE__'].result",
+            "error": "note_id_invalid",
+            "message": "L’identifiant de note est invalide."
+          },
+          "status": 400,
+          "contentType": "application/json"
+        },
+        "name": "Refuser l’identifiant",
+        "next": null,
+        "type": "return-response",
+        "__wwdescription": "Retourne 400 sans accès table ou stockage."
+      },
+      "file": {
+        "id": "file",
+        "args": {
+          "path": {
+            "code": "return context.workflow.select.result.data[0].markdown_file_path",
+            "__wwtype": "js"
+          },
+          "access": "private"
+        },
+        "name": "Lire Markdown privé",
+        "next": "format",
+        "type": "storage-get",
+        "__wwdescription": "Télécharge le contenu privé après validation de la note."
+      },
+      "found": {
+        "id": "found",
+        "name": "Note trouvée ?",
+        "next": null,
+        "type": "if",
+        "value": {
+          "code": "return Boolean(context.workflow.select.result?.data?.[0]?.markdown_file_path)",
+          "__wwtype": "js"
+        },
+        "branches": [
+          {
+            "id": "file",
+            "value": true
+          },
+          {
+            "id": "missing",
+            "value": false
+          }
+        ],
+        "__wwdescription": "Évite de révéler ou de lire un chemin absent."
+      },
+      "format": {
+        "id": "format",
+        "code": "const n=context.workflow.select.result.data[0]; const r=context.workflow.file.result; let markdown; if(typeof r==='string'&&r.startsWith('data:')) markdown=Buffer.from(r.split(',',2)[1],'base64').toString('utf8'); else if(r?.file?.text) markdown=await r.file.text(); else throw new Error('markdown_storage_result_unavailable'); return {note:{id:n.id,title:n.title,excerpt:n.excerpt,archived:n.archived,revision:n.revision,source_status:n.source_status,createdAt:n.createdAt,updatedAt:n.updatedAt},markdown,storage:{configured:true,state:'storage_ready',message:'Le Markdown a été lu depuis le stockage privé.'}};",
+        "name": "Préparer la note",
+        "next": "return",
+        "type": "custom-js",
+        "__wwdescription": "Décode le fichier et expose seulement les données d’édition."
+      },
+      "return": {
+        "id": "return",
+        "args": {
+          "body": {
+            "code": "return context.workflow.format.result",
             "__wwtype": "js"
           },
           "status": 200,
           "contentType": "application/json"
         },
-        "name": "Envoyer la réponse",
+        "name": "Renvoyer la note",
         "next": null,
         "type": "return-response",
-        "__wwdescription": "Retourne la note et son Markdown réel en JSON."
+        "__wwdescription": "Retourne la note et son Markdown sans chemin privé."
       },
-      "__SELECT_NOTE__": {
-        "id": "__SELECT_NOTE__",
+      "select": {
+        "id": "select",
         "name": "Lire la note",
-        "next": "__NOTE_FOUND__",
+        "next": "found",
         "type": "table-select",
         "count": false,
         "limit": 1,
@@ -65,6 +686,8 @@
           "id": true,
           "title": true,
           "excerpt": true,
+          "archived": true,
+          "revision": true,
           "createdAt": true,
           "updatedAt": true,
           "source_status": true,
@@ -76,7 +699,7 @@
             {
               "field": "id",
               "value": {
-                "code": "return context.parameters['noteId']",
+                "code": "return context.parameters.noteId",
                 "__wwtype": "js"
               },
               "operator": "$eq"
@@ -85,39 +708,25 @@
         },
         "tableName": "notes",
         "formulaColumns": {},
-        "__wwdescription": "Cherche une note par son identifiant."
+        "__wwdescription": "Lit la ligne et son chemin privé côté serveur."
       },
-      "__GET_MARKDOWN__": {
-        "id": "__GET_MARKDOWN__",
-        "args": {
-          "path": {
-            "code": "return context.workflow['__SELECT_NOTE__'].result.data[0].markdown_file_path",
-            "__wwtype": "js"
-          },
-          "access": "private"
-        },
-        "name": "Lire le Markdown privé",
-        "next": "__FORMAT_NOTE__",
-        "type": "storage-get",
-        "__wwdescription": "Charge le fichier Markdown privé référencé par la note."
-      },
-      "__RETURN_NOT_FOUND__": {
-        "id": "__RETURN_NOT_FOUND__",
+      "missing": {
+        "id": "missing",
         "args": {
           "body": {
-            "code": "return { error: 'note_not_found', message: 'La note demandée est introuvable.' }",
-            "__wwtype": "js"
+            "error": "note_not_found",
+            "message": "La note demandée est introuvable."
           },
           "status": 404,
           "contentType": "application/json"
         },
-        "name": "Envoyer la réponse introuvable",
+        "name": "Note introuvable",
         "next": null,
         "type": "return-response",
-        "__wwdescription": "Retourne une réponse JSON 404 explicite pour un identifiant absent."
+        "__wwdescription": "Retourne 404 sans exposer de chemin privé."
       }
     },
-    "firstAction": "__SELECT_NOTE__",
+    "firstAction": "v",
     "firstErrorAction": null,
     "meta": {
       "path": "/api/samnotes/notes/{noteId}",
@@ -212,5 +821,23 @@
     "firstErrorAction": null,
     "meta": {},
     "trigger": null
+  },
+  {
+    "id": "69f74c7c-e244-41d3-8236-3b09a9cdea23",
+    "parameters": [],
+    "actions": {
+      "deny": {
+        "id": "deny",
+        "code": "throw new Error('Les inscriptions publiques sont fermées. Contactez votre administrateur.');",
+        "name": "Refuser l’inscription publique",
+        "next": null,
+        "type": "custom-js",
+        "__wwdescription": "Refuse toute inscription libre. Les comptes sont provisionnés par l’administrateur."
+      }
+    },
+    "firstAction": "deny",
+    "firstErrorAction": null,
+    "meta": {},
+    "trigger": "weweb-auth/before-sign-up"
   }
 ]

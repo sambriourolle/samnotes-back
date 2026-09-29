@@ -153,6 +153,12 @@
         },
         "markdown_file_path": {
           "type": "text"
+        },
+        "archived": {
+          "type": "boolean"
+        },
+        "revision": {
+          "type": "double precision"
         }
       }
     },

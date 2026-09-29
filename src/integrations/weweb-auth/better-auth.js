@@ -4,7 +4,7 @@ import { createAuthMiddleware } from 'better-auth/api';
 import { impersonationPlugin } from './plugins/impersonation.plugin.js';
 import databaseService from '../../services/database/database.service.ts';
 import triggerCore from '../../core/trigger.core.js';
-import { getTrustedOrigins } from '../../core/config.core.js';
+import { getAppUrls, getTrustedOrigins, isDevelopment } from '../../core/config.core.js';
 import authUsersColumns from '../../data/authUsersColumns.json' with { type: 'json' };
 
 // Columns built into better-auth's user schema — handled natively, not via additionalFields
@@ -158,6 +158,8 @@ const hooks = {
     }),
 };
 
+const appUrls = getAppUrls().filter(Boolean);
+
 const buildCognitoProvider = () => {
     if (process.env.PROVIDER_COGNITO_ENABLED !== 'TRUE') return undefined;
     const clientId = process.env.PROVIDER_COGNITO_CLIENT_ID;
@@ -185,7 +187,11 @@ export default databaseService.pool && process.env.AUTH_SECRET
           database: databaseService.pool,
           trustedOrigins: getTrustedOrigins,
           secret: process.env.AUTH_SECRET,
-          baseURL: process.env.SERVER_URL,
+          // OAuth redirect_uri and cookies must follow the host the browser used (custom domains).
+          baseURL: {
+              allowedHosts: [...appUrls.map(url => new URL(url).host), ...(isDevelopment() ? ['localhost:*'] : [])],
+              fallback: appUrls[0] || process.env.SERVER_URL,
+          },
           basePath: '/api/auth',
           plugins: process.env.ENV === 'editor' ? [...plugins, impersonationPlugin()] : plugins,
           hooks: hooks,

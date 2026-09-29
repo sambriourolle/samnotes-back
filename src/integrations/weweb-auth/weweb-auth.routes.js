@@ -5,7 +5,14 @@ import betterAuth from './better-auth.js';
 import { pickWritableUserData } from './userData.ts';
 
 if (process.env.AUTH_SECRET) {
-    global.app.on(['POST', 'GET'], '/auth/*', c => betterAuth.handler(c.req.raw));
+    global.app.on(['POST', 'GET'], '/auth/*', c => {
+        // CloudFront sends the viewer host as x-tenant-host; better-auth only reads x-forwarded-host.
+        const tenantHost = c.req.header('x-tenant-host');
+        if (!tenantHost) return betterAuth.handler(c.req.raw);
+        const headers = new Headers(c.req.raw.headers);
+        headers.set('x-forwarded-host', tenantHost);
+        return betterAuth.handler(new Request(c.req.raw, { headers }));
+    });
 }
 
 global.editor.post('/weweb-auth/:env/select', async c => {

@@ -1,4 +1,25 @@
 {
+  "4b20bb50-0109-44a8-a6a9-3181c25da434": {
+    "id": "4b20bb50-0109-44a8-a6a9-3181c25da434",
+    "paths": {
+      "en": "connexion",
+      "default": "connexion"
+    }
+  },
+  "a93ff041-709c-4f00-b674-e17cc1416c0c": {
+    "id": "a93ff041-709c-4f00-b674-e17cc1416c0c",
+    "paths": {
+      "en": "notes",
+      "default": "notes"
+    }
+  },
+  "e9b3ad16-2240-428c-a9e4-633b5261646a": {
+    "id": "e9b3ad16-2240-428c-a9e4-633b5261646a",
+    "paths": {
+      "en": "note/{{id|new}}",
+      "default": "note/{{id|new}}"
+    }
+  },
   "af69dd64-e245-4104-95e0-6144505a4bb8": {
     "id": "af69dd64-e245-4104-95e0-6144505a4bb8",
     "paths": {
